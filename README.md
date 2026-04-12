@@ -132,5 +132,5 @@ Displays the change in the O'Connell difference over time (or across sectors) fo
 
 If you use this software in your research, please cite it as follows:
 
-S. Ceren Çalışkan. (2024). TESS-O-Connell-Analyzer (v1.0.0). GitHub. https://github.com/thematicmathematics/TESS-O-Connell-Analyzer
+S. Ceren Çalışkan. (2026). TESS-O-Connell-Analyzer (v1.0.0). GitHub. https://github.com/thematicmathematics/TESS-O-Connell-Analyzer
 
