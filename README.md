@@ -129,8 +129,8 @@ Displays the change in the O'Connell difference over time (or across sectors) fo
 2. Ricker, G. R., et al. (2015). Journal of Astronomical Telescopes, Instruments, and Systems, 1(1), 014003.
 3. Bevington, P. R., & Robinson, D. K. (2003). Data Reduction and Error Analysis for the Physical Sciences.
 ```
-```text
-## If you use this software in your research, please cite it as follows:
+
+If you use this software in your research, please cite it as follows:
 
 S. Ceren Çalışkan. (2024). TESS-O-Connell-Analyzer (v1.0.0). GitHub. https://github.com/thematicmathematics/TESS-O-Connell-Analyzer
-```
+
