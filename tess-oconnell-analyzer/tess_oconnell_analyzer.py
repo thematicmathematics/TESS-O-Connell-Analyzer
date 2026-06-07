@@ -87,54 +87,15 @@ def calculate_metrics(
     
     t, f = lc.time.value, lc.flux.value
     t0_btjd = params.epoch - 2457000.0
-    n_range = range(
-        math.floor((t.min() - t0_btjd) / params.period),
-        math.ceil((t.max() - t0_btjd) / params.period)
-    )
 
-    m1_vals, m2_vals = [], []
-    for n in n_range:
-        tm1 = t0_btjd + n * params.period + 0.25 * params.period
-        tm2 = t0_btjd + n * params.period + 0.75 * params.period
-        w = 0.05 * params.period
-
-        mask1 = (t >= tm1 - w) & (t <= tm1 + w)
-        mask2 = (t >= tm2 - w) & (t <= tm2 + w)
-
-        if np.any(mask1):
-            m1_vals.append([np.nanmean(t[mask1]), np.nanmedian(f[mask1]), np.nanstd(f[mask1]) / np.sqrt(np.sum(mask1))])
-        if np.any(mask2):
-            m2_vals.append([np.nanmean(t[mask2]), np.nanmedian(f[mask2]), np.nanstd(f[mask2]) / np.sqrt(np.sum(mask2))])
-
-    m1_pts, m2_pts = np.array(m1_vals), np.array(m2_vals)
-
-    if m1_pts.size > 0 and m2_pts.size > 0:
-        mean_m1, mean_m2 = np.mean(m1_pts[:, 1]), np.mean(m2_pts[:, 1])
-        err_m1 = np.sqrt(np.sum(m1_pts[:, 2]**2)) / len(m1_pts)
-        err_m2 = np.sqrt(np.sum(m2_pts[:, 2]**2)) / len(m2_pts)
-        local_diff = ((mean_m2 - mean_m1) / mean_m1) * 100 if mean_m1 != 0 else 0.0
-
-        if mean_m1 != 0 and mean_m2 != 0:
-            local_diff_err = abs(
-                (mean_m2 / mean_m1) * np.sqrt((err_m2 / mean_m2)**2 + (err_m1 / mean_m1)**2)
-            ) * 100
-        else:
-            local_diff_err = 0.0
-    else:
-        local_diff, local_diff_err = 0.0, 0.0
-
+    # --- ÖNCE ph_wrapped ve peak1/peak2 hesapla ---
     ph = folded_lc.phase.value   
     fl = folded_lc.flux.value    
     ph_norm    = ph / params.period            
-    ph_wrapped = np.where(ph_norm < 0,           
-                          ph_norm + 1.0,
-                          ph_norm)
+    ph_wrapped = np.where(ph_norm < 0, ph_norm + 1.0, ph_norm)
 
-    def find_true_maximum(p_arr: np.ndarray, f_arr: np.ndarray,
-                          search_lo: float, search_hi: float,
-                          n_bins: int = 100, smooth_hw: int = 5,
-                          meas_w: float = 0.05) -> Tuple[float, float, float, float]:
-
+    def find_true_maximum(p_arr, f_arr, search_lo, search_hi,
+                          n_bins=100, smooth_hw=5, meas_w=0.05):
         edges = np.linspace(search_lo, search_hi, n_bins + 1)
         bin_centers = 0.5 * (edges[:-1] + edges[1:])
         bin_flux = np.full(n_bins, np.nan)
@@ -142,7 +103,6 @@ def calculate_metrics(
             mask_b = (p_arr >= edges[i]) & (p_arr < edges[i + 1])
             if np.sum(mask_b) >= 2:
                 bin_flux[i] = np.nanmedian(f_arr[mask_b])
-
         valid = np.isfinite(bin_flux)
         if valid.sum() < 5:
             mid = (search_lo + search_hi) / 2.0
@@ -151,39 +111,28 @@ def calculate_metrics(
                 return mid, np.nanmedian(f_arr[raw_mask]), \
                        np.nanstd(f_arr[raw_mask]) / np.sqrt(np.sum(raw_mask)), True
             return mid, 0.0, 0.0, True
-        
-        bin_flux[~valid] = np.interp(bin_centers[~valid],
-                                     bin_centers[valid], bin_flux[valid])
+        bin_flux[~valid] = np.interp(bin_centers[~valid], bin_centers[valid], bin_flux[valid])
         kernel_size = 2 * smooth_hw + 1
-        smoothed = np.convolve(bin_flux,
-                               np.ones(kernel_size) / kernel_size,
-                               mode='same')
-        
-        peak_idx   = np.argmax(smoothed)
-        true_peak  = bin_centers[peak_idx]
+        smoothed = np.convolve(bin_flux, np.ones(kernel_size) / kernel_size, mode='same')
+        peak_idx  = np.argmax(smoothed)
+        true_peak = bin_centers[peak_idx]
         meas_mask = (p_arr > true_peak - meas_w) & (p_arr < true_peak + meas_w)
-
         if np.sum(meas_mask) < 3:
-            meas_mask = (p_arr > true_peak - meas_w * 1.5) & \
-                        (p_arr < true_peak + meas_w * 1.5)
+            meas_mask = (p_arr > true_peak - meas_w * 1.5) & (p_arr < true_peak + meas_w * 1.5)
         if np.sum(meas_mask) == 0:
             return true_peak, 0.0, 0.0, True
-
-        fv  = np.nanmedian(f_arr[meas_mask])
-        fe  = np.nanstd(f_arr[meas_mask]) / np.sqrt(np.sum(meas_mask))
+        fv = np.nanmedian(f_arr[meas_mask])
+        fe = np.nanstd(f_arr[meas_mask]) / np.sqrt(np.sum(meas_mask))
         return true_peak, fv, fe, False
-    
-    def fit_minima(p_arr: np.ndarray, f_arr: np.ndarray,
-                   expected: float, window: float = 0.05):
+
+    def fit_minima(p_arr, f_arr, expected, window=0.05):
         if expected == 0.0:
             mask = (p_arr > 1.0 - window) | (p_arr < window)
             p_fit = np.where(p_arr[mask] > 0.9, p_arr[mask] - 1.0, p_arr[mask])
         else:
             mask = (p_arr > expected - window) & (p_arr < expected + window)
             p_fit = p_arr[mask]
-
         f_fit = f_arr[mask]
-
         if len(p_fit) > 10:
             try:
                 z, cov = np.polyfit(p_fit, f_fit, 2, cov=True)
@@ -198,11 +147,10 @@ def calculate_metrics(
                         return res_p, err_p
             except Exception:
                 pass
-
         if np.any(mask):
             return p_arr[mask][np.argmin(f_fit)], 0.0
         return expected, 0.0
-    
+
     min1_phase, min1_err = fit_minima(ph_wrapped, fl, 0.0)
     min2_phase, min2_err = fit_minima(ph_wrapped, fl, 0.5)
 
@@ -221,8 +169,7 @@ def calculate_metrics(
     max2_lo = (min1_ph + eclipse_hw + edge_margin) % 1.0
     max2_hi = (min2_ph - eclipse_hw - edge_margin) % 1.0
 
-    def _valid_range(lo: float, hi: float,
-                     fallback_lo: float, fallback_hi: float):
+    def _valid_range(lo, hi, fallback_lo, fallback_hi):
         span = (hi - lo) % 1.0
         if span < 0.05 or span > 0.60:
             return fallback_lo, fallback_hi
@@ -231,10 +178,8 @@ def calculate_metrics(
     max1_lo, max1_hi = _valid_range(max1_lo, max1_hi, 0.15, 0.40)
     max2_lo, max2_hi = _valid_range(max2_lo, max2_hi, 0.60, 0.85)
 
-    peak1, g_m1, err_g1, fb1 = find_true_maximum(
-        ph_wrapped, fl, max1_lo, max1_hi)
-    peak2, g_m2, err_g2, fb2 = find_true_maximum(
-        ph_wrapped, fl, max2_lo, max2_hi)
+    peak1, g_m1, err_g1, fb1 = find_true_maximum(ph_wrapped, fl, max1_lo, max1_hi)
+    peak2, g_m2, err_g2, fb2 = find_true_maximum(ph_wrapped, fl, max2_lo, max2_hi)
 
     if g_m1 != 0 and g_m2 != 0 and not (fb1 and fb2):
         global_diff = ((g_m2 - g_m1) / g_m1) * 100
@@ -246,7 +191,42 @@ def calculate_metrics(
             global_diff_err = 0.0
     else:
         global_diff, global_diff_err = 0.0, 0.0
-        peak1, peak2 = 0.25, 0.75  
+        peak1, peak2 = 0.25, 0.75
+
+    n_range = range(
+        math.floor((t.min() - t0_btjd) / params.period),
+        math.ceil((t.max() - t0_btjd) / params.period)
+    )
+
+    m1_vals, m2_vals = [], []
+    for n in n_range:
+        tm1 = t0_btjd + n * params.period + peak1 * params.period
+        tm2 = t0_btjd + n * params.period + peak2 * params.period
+        w = 0.05 * params.period
+
+        mask1 = (t >= tm1 - w) & (t <= tm1 + w)
+        mask2 = (t >= tm2 - w) & (t <= tm2 + w)
+
+        if np.any(mask1):
+            m1_vals.append([np.nanmean(t[mask1]), np.nanmedian(f[mask1]), np.nanstd(f[mask1]) / np.sqrt(np.sum(mask1))])
+        if np.any(mask2):
+            m2_vals.append([np.nanmean(t[mask2]), np.nanmedian(f[mask2]), np.nanstd(f[mask2]) / np.sqrt(np.sum(mask2))])
+
+    m1_pts, m2_pts = np.array(m1_vals), np.array(m2_vals)
+
+    if m1_pts.size > 0 and m2_pts.size > 0:
+        mean_m1, mean_m2 = np.mean(m1_pts[:, 1]), np.mean(m2_pts[:, 1])
+        err_m1 = np.sqrt(np.sum(m1_pts[:, 2]**2)) / len(m1_pts)
+        err_m2 = np.sqrt(np.sum(m2_pts[:, 2]**2)) / len(m2_pts)
+        local_diff = ((mean_m2 - mean_m1) / mean_m1) * 100 if mean_m1 != 0 else 0.0
+        if mean_m1 != 0 and mean_m2 != 0:
+            local_diff_err = abs(
+                (mean_m2 / mean_m1) * np.sqrt((err_m2 / mean_m2)**2 + (err_m1 / mean_m1)**2)
+            ) * 100
+        else:
+            local_diff_err = 0.0
+    else:
+        local_diff, local_diff_err = 0.0, 0.0
 
     return (global_diff, global_diff_err, local_diff, local_diff_err,
             m1_pts, m2_pts, shift1, shift1_err, shift2, shift2_err,
