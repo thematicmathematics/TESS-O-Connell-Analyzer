@@ -88,7 +88,6 @@ def calculate_metrics(
     t, f = lc.time.value, lc.flux.value
     t0_btjd = params.epoch - 2457000.0
 
-    # --- ÖNCE ph_wrapped ve peak1/peak2 hesapla ---
     ph = folded_lc.phase.value   
     fl = folded_lc.flux.value    
     ph_norm    = ph / params.period            
