@@ -163,10 +163,10 @@ def calculate_metrics(
     min1_ph = (1.0 + shift1) % 1.0
     min2_ph = (0.5 + shift2) % 1.0
 
-    max1_lo = (min2_ph + eclipse_hw + edge_margin) % 1.0
-    max1_hi = (min1_ph - eclipse_hw - edge_margin) % 1.0
-    max2_lo = (min1_ph + eclipse_hw + edge_margin) % 1.0
-    max2_hi = (min2_ph - eclipse_hw - edge_margin) % 1.0
+    max1_lo = (min1_ph + eclipse_hw + edge_margin) % 1.0
+    max1_hi = (min2_ph - eclipse_hw - edge_margin) % 1.0
+    max2_lo = (min2_ph + eclipse_hw + edge_margin) % 1.0
+    max2_hi = (min1_ph - eclipse_hw - edge_margin) % 1.0
 
     def _valid_range(lo, hi, fallback_lo, fallback_hi):
         span = (hi - lo) % 1.0
